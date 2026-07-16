@@ -1,5 +1,17 @@
 part of 'main.dart';
 
+bool _isIOSVersion(int major, int minor) {
+  if (!Platform.isIOS) {
+    return false;
+  }
+  final match = RegExp(
+    r'(\d+)\.(\d+)',
+  ).firstMatch(Platform.operatingSystemVersion);
+  return match != null &&
+      int.parse(match.group(1)!) == major &&
+      int.parse(match.group(2)!) == minor;
+}
+
 void javascriptCodeEvaluation() {
   final shouldSkip = kIsWeb
       ? false
@@ -153,8 +165,10 @@ void javascriptCodeEvaluation() {
       expect(result.value, 49);
 
       result = await controller.callAsyncJavaScript(
-          functionBody: functionBody,
-          arguments: {'x': -49, 'y': 'error message'});
+        functionBody: functionBody,
+        arguments: {'x': -49, 'y': 'error message'},
+        contentWorld: ContentWorld.PAGE,
+      );
       expect(result, isNotNull);
       expect(result!.value, isNull);
       expect(result.error, 'error message');
@@ -193,11 +207,27 @@ void javascriptCodeEvaluation() {
           await controllerCompleter.future;
       await pageLoaded.future;
 
-      await controller.callAsyncJavaScript(
-          functionBody: "window.foo = 49;",
-          contentWorld: ContentWorld.world(name: "custom-world"));
       var result = await controller.callAsyncJavaScript(
-          functionBody: "return window.foo;");
+        functionBody: "window.foo = 49;",
+        contentWorld: ContentWorld.world(name: "custom-world"),
+      );
+      if (_isIOSVersion(16, 0)) {
+        expect(result, isNotNull);
+        expect(result!.value, isNull);
+        expect(
+          result.error,
+          "Custom content worlds are not supported by callAsyncJavaScript "
+          "on iOS 16.0.x",
+        );
+        return;
+      }
+
+      expect(result, isNotNull);
+      expect(result!.error, isNull);
+
+      result = await controller.callAsyncJavaScript(
+        functionBody: "return window.foo;",
+      );
       expect(result, isNotNull);
       expect(result!.error, isNull);
       expect(result.value, isNull);
